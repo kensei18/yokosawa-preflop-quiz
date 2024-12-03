@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 )
 
@@ -22,6 +23,7 @@ var answerOptions = []string{
 
 func main() {
 	fmt.Println("Welcome to the hand rank quiz!")
+	fmt.Println("If you want to finish the quiz, enter 'q'")
 	fmt.Println()
 
 	countQuestions := 0
@@ -29,9 +31,12 @@ func main() {
 	countQuestionsCh := make(chan int)
 	countCorrectCh := make(chan int)
 
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	go func() {
 		for {
-			var input rank
+			var input string
 
 			questionIdx := rand.Intn(13 * 13)
 
@@ -42,13 +47,29 @@ func main() {
 				fmt.Printf("%d. %s\n", i, v)
 			}
 
-			fmt.Print("> ")
-			fmt.Scan(&input)
+			var answer rank
+			for {
+				fmt.Print("> ")
+				fmt.Scan(&input)
+
+				if input == "q" {
+					quit <- syscall.SIGINT
+					return
+				}
+
+				a, err := strconv.Atoi(input)
+				if err != nil || a < 0 || a >= len(answerOptions) {
+					fmt.Println("Invalid input. Please enter a number between 0 and 8 or 'q' to quit.")
+					continue
+				}
+				answer = rank(a)
+				break
+			}
 
 			countQuestionsCh <- 1
 
 			hrs := handRanks()
-			if hrs[input].Contains(allHands[questionIdx]) {
+			if hrs[answer].Contains(allHands[questionIdx]) {
 				fmt.Println("Correct!")
 				countCorrectCh <- 1
 			} else {
@@ -70,13 +91,9 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
 	for {
 		select {
 		case <-quit:
-			fmt.Println()
 			fmt.Println()
 			fmt.Println("Quiz finished!")
 			fmt.Printf("Result: %d/%d\n", countCorrect, countQuestions)
