@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var answerOptions = []string{
@@ -21,39 +24,67 @@ func main() {
 	fmt.Println("Welcome to the hand rank quiz!")
 	fmt.Println()
 
-	for {
-		var input rank
+	countQuestions := 0
+	countCorrect := 0
+	countQuestionsCh := make(chan int)
+	countCorrectCh := make(chan int)
 
-		questionIdx := rand.Intn(13 * 13)
+	go func() {
+		for {
+			var input rank
 
-		fmt.Printf("The hand is %s\n", allHands[questionIdx])
-		fmt.Println("What is the rank of this hand?")
+			questionIdx := rand.Intn(13 * 13)
 
-		for i, v := range answerOptions {
-			fmt.Printf("%d. %s\n", i, v)
-		}
+			fmt.Printf("The hand is %s\n", allHands[questionIdx])
+			fmt.Println("What is the rank of this hand?")
 
-		fmt.Print("> ")
-		fmt.Scan(&input)
-
-		hrs := handRanks()
-		if hrs[input].Contains(allHands[questionIdx]) {
-			fmt.Println("Correct!")
-		} else {
-			fmt.Println("Incorrect.")
-
-			var correctAnswerMsg string
-			for i, v := range hrs {
-				if v.Contains(allHands[questionIdx]) {
-					correctAnswerMsg = fmt.Sprintf("The correct answer is: %s", answerOptions[i])
-					break
-				}
+			for i, v := range answerOptions {
+				fmt.Printf("%d. %s\n", i, v)
 			}
-			fmt.Println(correctAnswerMsg)
-		}
 
-		fmt.Println()
-		fmt.Println("--------------------")
-		fmt.Println()
+			fmt.Print("> ")
+			fmt.Scan(&input)
+
+			countQuestionsCh <- 1
+
+			hrs := handRanks()
+			if hrs[input].Contains(allHands[questionIdx]) {
+				fmt.Println("Correct!")
+				countCorrectCh <- 1
+			} else {
+				fmt.Println("Incorrect.")
+
+				var correctAnswerMsg string
+				for i, v := range hrs {
+					if v.Contains(allHands[questionIdx]) {
+						correctAnswerMsg = fmt.Sprintf("The correct answer is: %s", answerOptions[i])
+						break
+					}
+				}
+				fmt.Println(correctAnswerMsg)
+			}
+
+			fmt.Println()
+			fmt.Println("--------------------")
+			fmt.Println()
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-quit:
+			fmt.Println()
+			fmt.Println()
+			fmt.Println("Quiz finished!")
+			fmt.Printf("Result: %d/%d\n", countCorrect, countQuestions)
+			return
+		case c := <-countQuestionsCh:
+			countQuestions += c
+		case c := <-countCorrectCh:
+			countCorrect += c
+		}
 	}
 }
